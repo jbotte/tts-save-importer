@@ -4,12 +4,11 @@
 const $ = (id) => document.getElementById(id);
 
 const state = {
-  candidates: [],          // { path, exists }
-  customDirs: [],          // dirs the user added manually
-  active: null,            // { type: 'auto'|'custom'|'imports', path, label }
-  entries: [],             // scanned saves for the active folder
-  selectedSavePath: null,
-  imports: []              // manifest items
+  candidates: [], // { path, exists }
+  customDirs: [], // dirs the user added manually (fallback)
+  active: null, // { type: 'auto'|'custom', path }
+  entries: [],
+  selectedSavePath: null
 };
 
 // ---------- helpers ----------
@@ -36,13 +35,42 @@ function toast(msg, kind) {
   el.className = 'toast' + (kind ? ' ' + kind : '');
   el.textContent = msg;
   $('toasts').appendChild(el);
-  setTimeout(() => el.remove(), 5000);
+  setTimeout(() => el.remove(), 6500);
 }
 
 function shortPath(p) {
   if (!p) return '';
   const parts = p.split(/[\\/]/);
-  return parts.length > 3 ? '…' + '/' + parts.slice(-3).join('/') : p;
+  return parts.length > 3 ? '…/' + parts.slice(-3).join('/') : p;
+}
+
+function baseName(p) {
+  return String(p || '').split(/[\\/]/).pop();
+}
+
+// ---------- import ----------
+async function importPaths(paths) {
+  if (!paths.length) return;
+  const fallback = state.customDirs[0] || null;
+  const results = await window.tts.importToTTS(paths, fallback);
+  if (!Array.isArray(results)) return;
+  for (const r of results) {
+    if (r.ok) {
+      toast(`Imported ${r.name} → ${shortPath(r.dest)}. Open TTS → Save & Load → Singleplayer.`, 'ok');
+    } else if (r.alreadyThere) {
+      toast(`${r.name}: ${r.error}`);
+    } else {
+      toast(`${r.name}: ${r.error}`, 'bad');
+    }
+  }
+  // If a save was dropped into the folder we're currently viewing, refresh it.
+  if (state.active) await selectFolder(state.active.path, state.active.type);
+}
+
+async function pickAndImport() {
+  const paths = await window.tts.pickSaveFiles();
+  if (!paths || !paths.length) return;
+  await importPaths(paths);
 }
 
 // ---------- sidebar ----------
@@ -85,24 +113,16 @@ function renderSidebar() {
     custom.appendChild(li);
   }
 
-  $('import-count').textContent = state.imports.length;
-  const imp = $('import-list');
-  imp.innerHTML = '';
-  for (const item of state.imports) {
-    const li = document.createElement('li');
-    li.innerHTML = `${esc(item.name)} <span class="badge">${item.objectCount} obj</span>`;
-    li.addEventListener('click', () => showImportDetail(item));
-    imp.appendChild(li);
-  }
-
   $('side-footer').innerHTML =
-    'Expected TTS Saves folders:<br>' +
-    state.candidates.map((c) => `<code class="hint">${esc(c.path)}</code>`).join('<br>');
+    'Imports are copied straight into:<br>' +
+    '<code class="hint">' +
+    esc(existing.length ? existing[0].path : 'detected Saves/Singleplayer') +
+    '</code>';
 }
 
 // ---------- folder / save list ----------
 async function selectFolder(dir, type) {
-  state.active = { type, path: dir, label: dir };
+  state.active = { type, path: dir };
   renderSidebar();
   const res = await window.tts.scanDirectory(dir);
   if (res.error) {
@@ -142,7 +162,7 @@ function renderSaveList() {
   }
 }
 
-// ---------- detail panes ----------
+// ---------- detail pane ----------
 async function showSaveDetail(filePath) {
   state.selectedSavePath = filePath;
   renderSaveList();
@@ -155,8 +175,8 @@ async function showSaveDetail(filePath) {
       `<h2>${esc(s.name || filePath)}</h2>` +
       `<div class="sub">${esc(s.path)}</div>` +
       `<p class="error">${esc(s.error)}</p>` +
-      detailButtonsForSave(filePath);
-    bindDetailButtons(filePath, null);
+      detailButtons();
+    bindDetailButtons(filePath);
     return;
   }
 
@@ -186,69 +206,20 @@ async function showSaveDetail(filePath) {
     `<div class="kv">${rows
       .map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`)
       .join('')}</div>` +
-    detailButtonsForSave(filePath);
-  bindDetailButtons(filePath, null);
+    detailButtons();
+  bindDetailButtons(filePath);
 }
 
-function detailButtonsForSave(filePath) {
+function detailButtons() {
+  // Saves browsed from a detected TTS folder are already in the game.
+  const inTts = state.active && state.active.type === 'auto';
   return `<div class="detail-actions">
-    <button class="primary" data-act="import">Import to library</button>
+    ${inTts
+      ? '<span class="badge ok" style="padding:6px 10px">Already in your TTS saves</span>'
+      : '<button class="primary" data-act="import">Import to TTS</button>'}
     <button data-act="raw">View raw JSON</button>
     <button data-act="show">Show in folder</button>
   </div>`;
-}
-
-async function showImportDetail(item) {
-  state.selectedSavePath = null;
-  renderSaveList();
-  const pane = $('detail-pane');
-  const rows = [
-    ['Save name', item.name],
-    ['Game name', item.gameName],
-    ['In-game date', item.date],
-    ['Table', item.table],
-    ['Objects', item.objectCount],
-    ['Imported at', item.importedAt ? new Date(item.importedAt).toLocaleString() : '—'],
-    ['File size', fmtBytes(item.sizeBytes)],
-    ['Source', item.sourceLabel],
-    ['Looks like a TTS save', item.looksLikeTts ? 'yes' : 'unexpected — check contents']
-  ];
-  pane.innerHTML =
-    `<h2>${esc(item.name)} <span class="badge">imported</span></h2>` +
-    `<div class="sub">${esc(item.fileName)} · id ${esc(item.id)}</div>` +
-    `<div class="kv">${rows
-      .map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`)
-      .join('')}</div>` +
-    `<div class="detail-actions">
-      <button class="primary" data-act="restore" data-id="${esc(item.id)}">Add to TTS saves</button>
-      <button data-act="raw-import" data-id="${esc(item.id)}">View raw JSON</button>
-      <button data-act="export" data-id="${esc(item.id)}">Export copy…</button>
-      <button class="danger" data-act="remove" data-id="${esc(item.id)}">Remove</button>
-    </div>`;
-
-  pane.querySelectorAll('button[data-act]').forEach((btn) => {
-    const id = btn.getAttribute('data-id');
-    btn.addEventListener('click', async () => {
-      const act = btn.getAttribute('data-act');
-      if (act === 'restore') {
-        const r = await window.tts.restoreImport(id);
-        if (r && r.ok) toast(`Restored to ${r.dest} — open TTS → Save & Load → Singleplayer`, 'ok');
-        else if (r && r.error) toast(r.error, 'bad');
-      } else if (act === 'raw-import') {
-        const raw = await window.tts.importRaw(id);
-        openRaw(item.name, raw);
-      } else if (act === 'export') {
-        const r = await window.tts.exportImport(id);
-        if (r && r.ok) toast(`Exported to ${r.dest}`, 'ok');
-        else if (r && r.error) toast(r.error, 'bad');
-      } else if (act === 'remove') {
-        await window.tts.removeImport(id);
-        await refreshImports();
-        $('detail-pane').innerHTML = '<p class="muted">Select a save to see its details.</p>';
-        toast('Removed from library.', 'ok');
-      }
-    });
-  });
 }
 
 function bindDetailButtons(filePath) {
@@ -257,13 +228,7 @@ function bindDetailButtons(filePath) {
     btn.addEventListener('click', async () => {
       const act = btn.getAttribute('data-act');
       if (act === 'import') {
-        const r = await window.tts.importFile(filePath);
-        if (r.ok) {
-          toast(`Imported “${r.item.name}”`, 'ok');
-          await refreshImports();
-        } else {
-          toast(r.error || 'Import failed.', 'bad');
-        }
+        await importPaths([filePath]);
       } else if (act === 'raw') {
         const raw = await window.tts.saveRaw(filePath);
         openRaw(filePath, raw);
@@ -296,28 +261,6 @@ $('raw-modal').addEventListener('click', (e) => {
   if (e.target === $('raw-modal')) $('raw-modal').classList.add('hidden');
 });
 
-// ---------- imports ----------
-async function refreshImports() {
-  state.imports = await window.tts.listImports();
-  renderSidebar();
-}
-
-async function importPaths(paths) {
-  let ok = 0;
-  let fail = 0;
-  for (const p of paths) {
-    const r = await window.tts.importFile(p);
-    if (r.ok) ok++;
-    else {
-      fail++;
-      toast(`${p.split(/[\\/]/).pop()}: ${r.error}`, 'bad');
-    }
-  }
-  if (ok) toast(`Imported ${ok} save file(s).`, 'ok');
-  await refreshImports();
-  return { ok, fail };
-}
-
 // ---------- top actions ----------
 $('btn-refresh').addEventListener('click', async () => {
   await refreshLocations({ keepActive: true });
@@ -332,21 +275,10 @@ $('btn-add-folder').addEventListener('click', async () => {
   await selectFolder(res.dir, 'custom');
 });
 
-$('btn-import-file').addEventListener('click', async () => {
-  const results = await window.tts.pickAndImportFiles();
-  if (!results || !results.length) return;
-  const ok = results.filter((r) => r.ok).length;
-  const fail = results.length - ok;
-  if (ok) toast(`Imported ${ok} save file(s).`, 'ok');
-  for (const r of results) if (!r.ok) toast(r.error, 'bad');
-  await refreshImports();
-});
+$('btn-import-file').addEventListener('click', () => pickAndImport());
 
-$('btn-open-lib').addEventListener('click', () => window.tts.openLibraryFolder());
-
-if (window.tts.onMenuAddFolder) {
-  window.tts.onMenuAddFolder(() => $('btn-add-folder').click());
-}
+if (window.tts.onMenuAddFolder) window.tts.onMenuAddFolder(() => $('btn-add-folder').click());
+if (window.tts.onMenuImportFile) window.tts.onMenuImportFile(() => pickAndImport());
 
 // ---------- drag & drop ----------
 let dragCounter = 0;
@@ -388,14 +320,28 @@ async function refreshLocations({ keepActive = false } = {}) {
 }
 
 async function init() {
+  // One-time migration from the old staging library (v0.1.x), if any.
+  try {
+    const boot = await window.tts.bootstrap();
+    if (boot && boot.migrated && boot.migrated.length) {
+      toast(
+        `Moved ${boot.migrated.length} earlier import(s) into TTS: ${boot.migrated.map(baseName).join(', ')} — open TTS → Save & Load → Singleplayer.`,
+        'ok'
+      );
+    } else if (boot && boot.pending) {
+      toast('You have imports from an older version waiting — they will move into TTS once a saves folder is detected.', 'bad');
+    }
+  } catch {
+    /* migration is best-effort */
+  }
+
   await refreshLocations();
-  await refreshImports();
   if (!state.candidates.some((c) => c.exists)) {
     $('detail-pane').innerHTML =
       '<div class="empty"><h2>No save folders found</h2>' +
       '<p>We could not find a Tabletop Simulator <code>Saves</code> folder automatically.<br>' +
       'Open Tabletop Simulator once (Steam → play) so the folder exists, or click ' +
-      '<b>Add folder…</b> and pick your Saves folder manually.</p></div>';
+      '<b>Add folder…</b> and pick your Saves folder manually — imports will then go there.</p></div>';
   }
 }
 

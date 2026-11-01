@@ -11,6 +11,7 @@ const path = require('path');
 
 const { candidateSaveDirs, scanSaveDirectory } = require('../src/tts-locations');
 const { summarizeSaveFile } = require('../src/save-parser');
+const { pickImportDir, importOne } = require('../src/import-to-game');
 const { ImportLibrary } = require('../src/import-library');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
@@ -138,6 +139,46 @@ async function main() {
   items = await library.list();
   assert.strictEqual(items.length, 0);
   assert(!fs.existsSync(library.itemFilePath(res.item.id)), 'removed from disk');
+
+  // ---- Direct import into the game's saves (v0.2 model) ----
+  // Auto-detected destination (fake linux proton prefix from above)
+  const saveSrc = path.join(tmp, 'downloads', 'from-email.json');
+  fs.mkdirSync(path.dirname(saveSrc), { recursive: true });
+  fs.writeFileSync(saveSrc, JSON.stringify({ SaveName: 'From Email', GameName: 'Poker', States: [{}] }));
+
+  const imp1 = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome });
+  assert(imp1.ok, 'import to detected dir: ' + (imp1.error || ''));
+  assert(imp1.dest.includes(path.join('compatdata', '286160')), 'landed in proton saves');
+  assert(imp1.dest.endsWith(path.join('Singleplayer', 'from-email.json')), 'landed in Singleplayer');
+  assert.strictEqual(imp1.gameName, 'Poker');
+  assert(fs.existsSync(imp1.dest));
+
+  // Collision: second import of same name gets -1 suffix
+  const imp2 = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome });
+  assert(imp2.ok && imp2.dest.endsWith('from-email-1.json'), 'collision suffix: ' + imp2.dest);
+
+  // Same file re-imported (now inside dest) is a no-op, not a duplicate
+  const imp3 = await importOne(imp1.dest, null, { platform: 'linux', env: {}, home: linHome });
+  assert(!imp3.ok && imp3.alreadyThere, 'already-in-folder detected');
+
+  // Junk never reaches the game folder
+  const junkSrc = path.join(tmp, 'downloads', 'junk.json');
+  fs.writeFileSync(junkSrc, 'not json at all');
+  const junkDirBefore = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves', 'Singleplayer')).length;
+  const impJunk = await importOne(junkSrc, null, { platform: 'linux', env: {}, home: linHome });
+  assert(!impJunk.ok && /Invalid JSON/.test(impJunk.error), 'junk rejected');
+  const junkDirAfter = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves', 'Singleplayer')).length;
+  assert.strictEqual(junkDirBefore, junkDirAfter, 'junk never copied into game folder');
+
+  // Fallback dir when nothing is detected (fresh empty home, no steam anywhere)
+  const lonelyHome = path.join(tmp, 'lonely');
+  fs.mkdirSync(lonelyHome, { recursive: true });
+  const noDir = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: lonelyHome });
+  assert(!noDir.ok && noDir.noDetectedDir, 'reports missing detection');
+  const manualDir = path.join(tmp, 'manual-saves');
+  fs.mkdirSync(manualDir, { recursive: true });
+  const fb = await importOne(saveSrc, manualDir, { platform: 'linux', env: {}, home: lonelyHome });
+  assert(fb.ok && fb.dest.startsWith(path.join(tmp, 'manual-saves')), 'fallback dir used: ' + (fb.error || fb.dest));
 
   console.log('✓ all smoke tests passed');
   fs.rmSync(tmp, { recursive: true, force: true });

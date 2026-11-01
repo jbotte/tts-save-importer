@@ -6,10 +6,9 @@ const fsp = fs.promises;
 
 const { candidateSaveDirs, detectSaveLocations, scanSaveDirectory, isDir } = require('./src/tts-locations');
 const { summarizeSaveFile, readRawPreview } = require('./src/save-parser');
-const { ImportLibrary } = require('./src/import-library');
+const { pickImportDir, importOne } = require('./src/import-to-game');
 
 let mainWindow = null;
-let library = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -40,7 +39,9 @@ function buildMenu() {
         {
           label: 'Import Save File…',
           accelerator: 'CmdOrCtrl+O',
-          click: () => importViaDialog()
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('menu:import-file');
+          }
         },
         {
           label: 'Add Save Folder…',
@@ -60,26 +61,54 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function importViaDialog() {
-  if (!mainWindow) return [];
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Import Tabletop Simulator save',
-    buttonLabel: 'Import',
-    properties: ['openFile', 'multiSelections'],
-    filters: [
-      { name: 'Tabletop Simulator save (*.json)', extensions: ['json'] },
-      { name: 'All files', extensions: ['*'] }
-    ]
-  });
-  if (result.canceled || !result.filePaths.length) return [];
-  const results = [];
-  for (const filePath of result.filePaths) {
-    results.push(await library.import(filePath));
+// ---------- import destination logic lives in src/import-to-game.js ----------
+
+// One-time migration: the old version staged imports in a library folder.
+// Move any leftovers straight into the game's saves, then retire the manifest.
+async function migrateLegacyLibrary() {
+  const out = { migrated: [], pending: false };
+  const libDir = path.join(app.getPath('userData'), 'library');
+  const manifestPath = path.join(libDir, 'manifest.json');
+  let manifest;
+  try {
+    manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  } catch {
+    return out; // no old library — nothing to do
   }
-  return results;
+  if (!manifest || !Array.isArray(manifest.items) || !manifest.items.length) return out;
+
+  const destDir = pickImportDir(null);
+  if (!destDir) {
+    out.pending = true;
+    return out; // try again next launch
+  }
+  for (const item of manifest.items) {
+    const src = path.join(libDir, 'items', item.id, item.fileName || '');
+    try {
+      await fsp.access(src);
+      JSON.parse(await fsp.readFile(src, 'utf8')); // never copy junk into the game folder
+      let dest = path.join(destDir, path.basename(src));
+      let n = 1;
+      while (fs.existsSync(dest)) {
+        dest = path.join(destDir, path.basename(src).replace(/\.json$/i, '') + `-${n++}.json`);
+      }
+      await fsp.copyFile(src, dest);
+      out.migrated.push(dest);
+    } catch {
+      /* skip unreadable entries; originals stay on disk under library/ */
+    }
+  }
+  try {
+    await fsp.rename(manifestPath, manifestPath + '.migrated');
+  } catch {
+    /* fine */
+  }
+  return out;
 }
 
 // ---------- IPC ----------
+ipcMain.handle('app:bootstrap', () => migrateLegacyLibrary());
+
 ipcMain.handle('locations:candidates', () =>
   candidateSaveDirs().map((p) => ({ path: p, exists: isDir(p) }))
 );
@@ -112,72 +141,26 @@ ipcMain.handle('folder:pick', async () => {
   return scanSaveDirectory(r.filePaths[0]);
 });
 
-ipcMain.handle('file:pick', () => importViaDialog());
-ipcMain.handle('import:add', (_e, p) => library.import(p));
-ipcMain.handle('imports:list', () => library.list());
-ipcMain.handle('imports:remove', (_e, id) => library.remove(id));
-
-ipcMain.handle('imports:export', async (_e, id) => {
+ipcMain.handle('file:pick', async () => {
   if (!mainWindow) return null;
-  const r = await dialog.showOpenDialog(mainWindow, {
-    title: 'Export save to folder…',
-    buttonLabel: 'Export here',
-    properties: ['openDirectory', 'createDirectory']
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import save into Tabletop Simulator',
+    buttonLabel: 'Import',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Tabletop Simulator save (*.json)', extensions: ['json'] },
+      { name: 'All files', extensions: ['*'] }
+    ]
   });
-  if (r.canceled || !r.filePaths.length) return null;
-  try {
-    return { ok: true, dest: await library.exportItem(id, r.filePaths[0]) };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths;
 });
 
-ipcMain.handle('imports:restore', async (_e, id) => {
-  const item = await library.get(id);
-  if (!item) return { ok: false, error: 'Import not found.' };
-  const src = path.join(library.itemFilePath(id), item.fileName);
-
-  // Preferred destination: Singleplayer folder of the first detected TTS Saves dir.
-  let destDir = null;
-  const locs = detectSaveLocations();
-  if (locs.length) {
-    destDir = path.join(locs[0].path, 'Singleplayer');
-    try {
-      await fsp.mkdir(destDir, { recursive: true });
-    } catch {
-      destDir = null;
-    }
-  }
-  if (!destDir) {
-    if (!mainWindow) return { ok: false, error: 'No TTS save location detected.' };
-    const r = await dialog.showOpenDialog(mainWindow, {
-      title: 'Where should the save be restored?',
-      buttonLabel: 'Restore here',
-      properties: ['openDirectory', 'createDirectory']
-    });
-    if (r.canceled || !r.filePaths.length) return null; // user canceled
-    destDir = r.filePaths[0];
-  }
-
-  let dest = path.join(destDir, item.fileName);
-  let n = 1;
-  while (fs.existsSync(dest)) {
-    dest = path.join(destDir, item.fileName.replace(/\.json$/i, '') + `-${n++}.json`);
-  }
-  try {
-    await fsp.copyFile(src, dest);
-  } catch (e) {
-    return { ok: false, error: `Restore failed: ${e.message}` };
-  }
-  return { ok: true, dest };
-});
-
-ipcMain.handle('library:openFolder', () => shell.openPath(library.baseDir));
-
-ipcMain.handle('import:raw', async (_e, id) => {
-  const item = await library.get(id);
-  if (!item) return { error: 'Import not found.' };
-  return readRawPreview(path.join(library.itemFilePath(id), item.fileName));
+ipcMain.handle('saves:import', async (_e, filePaths, fallbackDir) => {
+  const list = Array.isArray(filePaths) ? filePaths : [filePaths];
+  const results = [];
+  for (const p of list) results.push(await importOne(p, fallbackDir));
+  return results;
 });
 
 ipcMain.handle('shell:showItem', (_e, p) => {
@@ -188,9 +171,7 @@ ipcMain.handle('shell:showItem', (_e, p) => {
 // ---------- Lifecycle ----------
 app.setName('TTS Save Importer');
 
-app.whenReady().then(async () => {
-  library = new ImportLibrary(path.join(app.getPath('userData'), 'library'));
-  await library.init();
+app.whenReady().then(() => {
   buildMenu();
   createWindow();
   app.on('activate', () => {

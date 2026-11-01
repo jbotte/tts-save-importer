@@ -7,7 +7,7 @@ A cross-platform **Electron** app for importing **Tabletop Simulator** save JSON
 - **Auto-detects** TTS `Saves` folders for your OS (see table below), including OneDrive-redirected Documents on Windows and every Steam library / Proton prefix on Linux (Flatpak and Snap included).
 - **Lists** every `.json` save (Singleplayer / Multiplayer autosaves / Workshop), newest first.
 - **Inspects** a save before importing: game name, table, object/zone/graph counts, script presence, size, modified date — and flags broken JSON.
-- **Imports** validated copies into its own library (originals are never touched). **"Add to TTS saves"** puts an imported save straight back into your TTS `Saves/Singleplayer` folder so it shows up in the game's Save & Load panel; Export copies any file anywhere. Drag & drop or **"Open folder"** to browse the library on disk.
+- **Imports** validated saves straight into the detected TTS folder (`…/Saves/Singleplayer/`) — one step, no staging area, no directory picking. Originals are never modified; name collisions get a numeric suffix. **Add folder…** exists purely as a fallback when auto-detection can't find the folder (exotic Steam setups).
 - **Drag & drop** `.json` files anywhere onto the window to import.
 - **Add folder…** for any custom/odd save location the auto-detector can't find.
 
@@ -78,11 +78,6 @@ test/smoke.js           node test covering all three platforms
 
 The `src/` modules are pure Node (no Electron imports), so they are unit-tested on any host — the tests fake a Windows/Mac/Linux home directory and assert discovery, scanning, parsing and import all behave.
 
-## Imported library location
+## Import destination
 
-Copies live under the app's userData folder, e.g.
-- Windows: `%APPDATA%/TTS Save Importer/library`
-- macOS: `~/Library/Application Support/TTS Save Importer/library`
-- Linux: `~/.config/TTS Save Importer/library`
-
-`manifest.json` there is the index; each import is its own folder with the copied save.
+Imports are copied directly into `<detected Saves>/Singleplayer/` — Windows `%USERPROFILE%\Documents\My Games\Tabletop Simulator\Saves\Singleplayer`, macOS `~/Documents/My Games/Tabletop Simulator/Saves/Singleplayer`, Linux the Proton prefix equivalent (see table). Nothing is staged in an app-owned library; the app stores no save data of its own.
