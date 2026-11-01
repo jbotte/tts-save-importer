@@ -83,10 +83,11 @@ function win32Candidates(env, home) {
 
 function darwinCandidates(home) {
   return [
+    // Community threads report this as the default for newer builds
     path.join(home, 'Documents', ...SAVES_SEGMENTS),
     // Older/alternative app-support location, just in case
     path.join(home, 'Library', 'Application Support', 'Tabletop Simulator', 'Saves'),
-    // Some Mac builds persist saves directly under ~/Library (seen in the wild)
+    // Official KB "Save Game Data Location" for macOS (kb.tabletopsimulator.com)
     path.join(home, 'Library', 'Tabletop Simulator', 'Saves')
   ];
 }
