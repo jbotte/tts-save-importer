@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('tts', {
   listImports: () => ipcRenderer.invoke('imports:list'),
   removeImport: (id) => ipcRenderer.invoke('imports:remove', id),
   exportImport: (id) => ipcRenderer.invoke('imports:export', id),
+  restoreImport: (id) => ipcRenderer.invoke('imports:restore', id),
+  openLibraryFolder: () => ipcRenderer.invoke('library:openFolder'),
   importRaw: (id) => ipcRenderer.invoke('import:raw', id),
 
   // Misc

@@ -220,6 +220,7 @@ async function showImportDetail(item) {
       .map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>`)
       .join('')}</div>` +
     `<div class="detail-actions">
+      <button class="primary" data-act="restore" data-id="${esc(item.id)}">Add to TTS saves</button>
       <button data-act="raw-import" data-id="${esc(item.id)}">View raw JSON</button>
       <button data-act="export" data-id="${esc(item.id)}">Export copy…</button>
       <button class="danger" data-act="remove" data-id="${esc(item.id)}">Remove</button>
@@ -229,7 +230,11 @@ async function showImportDetail(item) {
     const id = btn.getAttribute('data-id');
     btn.addEventListener('click', async () => {
       const act = btn.getAttribute('data-act');
-      if (act === 'raw-import') {
+      if (act === 'restore') {
+        const r = await window.tts.restoreImport(id);
+        if (r && r.ok) toast(`Restored to ${r.dest} — open TTS → Save & Load → Singleplayer`, 'ok');
+        else if (r && r.error) toast(r.error, 'bad');
+      } else if (act === 'raw-import') {
         const raw = await window.tts.importRaw(id);
         openRaw(item.name, raw);
       } else if (act === 'export') {
@@ -336,6 +341,8 @@ $('btn-import-file').addEventListener('click', async () => {
   for (const r of results) if (!r.ok) toast(r.error, 'bad');
   await refreshImports();
 });
+
+$('btn-open-lib').addEventListener('click', () => window.tts.openLibraryFolder());
 
 if (window.tts.onMenuAddFolder) {
   window.tts.onMenuAddFolder(() => $('btn-add-folder').click());

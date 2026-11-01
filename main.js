@@ -1,6 +1,8 @@
 'use strict';
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const fsp = fs.promises;
 
 const { candidateSaveDirs, detectSaveLocations, scanSaveDirectory, isDir } = require('./src/tts-locations');
 const { summarizeSaveFile, readRawPreview } = require('./src/save-parser');
@@ -129,6 +131,48 @@ ipcMain.handle('imports:export', async (_e, id) => {
     return { ok: false, error: e.message };
   }
 });
+
+ipcMain.handle('imports:restore', async (_e, id) => {
+  const item = await library.get(id);
+  if (!item) return { ok: false, error: 'Import not found.' };
+  const src = path.join(library.itemFilePath(id), item.fileName);
+
+  // Preferred destination: Singleplayer folder of the first detected TTS Saves dir.
+  let destDir = null;
+  const locs = detectSaveLocations();
+  if (locs.length) {
+    destDir = path.join(locs[0].path, 'Singleplayer');
+    try {
+      await fsp.mkdir(destDir, { recursive: true });
+    } catch {
+      destDir = null;
+    }
+  }
+  if (!destDir) {
+    if (!mainWindow) return { ok: false, error: 'No TTS save location detected.' };
+    const r = await dialog.showOpenDialog(mainWindow, {
+      title: 'Where should the save be restored?',
+      buttonLabel: 'Restore here',
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (r.canceled || !r.filePaths.length) return null; // user canceled
+    destDir = r.filePaths[0];
+  }
+
+  let dest = path.join(destDir, item.fileName);
+  let n = 1;
+  while (fs.existsSync(dest)) {
+    dest = path.join(destDir, item.fileName.replace(/\.json$/i, '') + `-${n++}.json`);
+  }
+  try {
+    await fsp.copyFile(src, dest);
+  } catch (e) {
+    return { ok: false, error: `Restore failed: ${e.message}` };
+  }
+  return { ok: true, dest };
+});
+
+ipcMain.handle('library:openFolder', () => shell.openPath(library.baseDir));
 
 ipcMain.handle('import:raw', async (_e, id) => {
   const item = await library.get(id);
