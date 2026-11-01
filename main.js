@@ -156,10 +156,13 @@ ipcMain.handle('file:pick', async () => {
   return result.filePaths;
 });
 
-ipcMain.handle('saves:import', async (_e, filePaths, fallbackDir) => {
-  const list = Array.isArray(filePaths) ? filePaths : [filePaths];
+ipcMain.handle('saves:import', async (_e, items, fallbackDir) => {
+  // items: [{ path, name? }] — name is an optional rename for the copy
+  const list = Array.isArray(items) ? items : [{ path: items }];
   const results = [];
-  for (const p of list) results.push(await importOne(p, fallbackDir));
+  for (const it of list) {
+    results.push(await importOne(it && it.path, fallbackDir, undefined, it && it.name));
+  }
   return results;
 });
 

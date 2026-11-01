@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('tts', {
 
   // Import = copy straight into the TTS saves folder
   pickSaveFiles: () => ipcRenderer.invoke('file:pick'),
-  importToTTS: (paths, fallbackDir) => ipcRenderer.invoke('saves:import', paths, fallbackDir),
+  importToTTS: (items, fallbackDir) => ipcRenderer.invoke('saves:import', items, fallbackDir),
 
   // Misc
   showInFolder: (p) => ipcRenderer.invoke('shell:showItem', p),

@@ -136,6 +136,17 @@
       white-space: pre; color: #c9d2e3;
     }
 
+    #rename-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 45; }
+    #rename-modal.hidden { display: none; }
+    .rename-card { width: min(560px, 92vw); background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+    .rename-card h3 { margin: 0 0 4px; font-size: 16px; }
+    #rename-rows { margin: 14px 0; display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; }
+    .rename-row { display: flex; flex-direction: column; gap: 4px; }
+    .rename-row .orig { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rename-row input { font: inherit; color: var(--text); background: var(--bg3); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+    .rename-row input:focus { outline: none; border-color: var(--accent); }
+    .rename-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
     body.dragging::after {
       content: "Drop .json save files to import";
       position: fixed; inset: 12px; border: 2px dashed var(--accent); border-radius: 14px;
@@ -179,6 +190,18 @@
       </div>
     </section>
   </main>
+
+  <div id="rename-modal" class="hidden">
+    <div class="rename-card">
+      <h3>Import to Tabletop Simulator</h3>
+      <p class="muted" id="rename-dest" style="font-size:12px;margin:4px 0 0"></p>
+      <div id="rename-rows"></div>
+      <div class="rename-actions">
+        <button id="rename-cancel">Cancel</button>
+        <button id="rename-ok" class="primary">Import</button>
+      </div>
+    </div>
+  </div>
 
   <div id="raw-modal" class="hidden">
     <div class="raw-card">

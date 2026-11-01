@@ -167,7 +167,7 @@ async function main() {
   const imp1 = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome });
   assert(imp1.ok, 'import to detected dir: ' + (imp1.error || ''));
   assert(imp1.dest.includes(path.join('compatdata', '286160')), 'landed in proton saves');
-  assert(imp1.dest.endsWith(path.join('Singleplayer', 'from-email.json')), 'landed in Singleplayer');
+  assert(imp1.dest === path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves', 'from-email.json'), 'landed in Saves root');
   assert.strictEqual(imp1.gameName, 'Poker');
   assert(fs.existsSync(imp1.dest));
 
@@ -182,10 +182,10 @@ async function main() {
   // Junk never reaches the game folder
   const junkSrc = path.join(tmp, 'downloads', 'junk.json');
   fs.writeFileSync(junkSrc, 'not json at all');
-  const junkDirBefore = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves', 'Singleplayer')).length;
+  const junkDirBefore = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves')).length;
   const impJunk = await importOne(junkSrc, null, { platform: 'linux', env: {}, home: linHome });
   assert(!impJunk.ok && /Invalid JSON/.test(impJunk.error), 'junk rejected');
-  const junkDirAfter = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves', 'Singleplayer')).length;
+  const junkDirAfter = fs.readdirSync(path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves')).length;
   assert.strictEqual(junkDirBefore, junkDirAfter, 'junk never copied into game folder');
 
   // Fallback dir when nothing is detected (fresh empty home, no steam anywhere)
@@ -208,19 +208,35 @@ async function main() {
   const impOld = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: oldHome });
   assert(impOld.ok && impOld.dest === path.join(oldRoot, 'from-email.json'), 'old-layout: import goes to Saves root: ' + (impOld.dest || impOld.error));
 
-  // Modern layout with real saves in Singleplayer wins even if root has stray json
+  // Root is used even when a Singleplayer/ subfolder with saves exists
   const modernHome = path.join(tmp, 'modernmac');
   const modernRoot = path.join(modernHome, 'Library', 'Tabletop Simulator', 'Saves');
   writeSaves(modernRoot); // Singleplayer/ has saves; root has a Multiplayer autosave file
   const impModern = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: modernHome });
-  assert(impModern.ok && impModern.dest.includes('Singleplayer'), 'modern layout: Singleplayer preferred: ' + (impModern.dest || impModern.error));
+  assert(impModern.ok && impModern.dest === path.join(modernRoot, 'from-email.json'), 'Saves root used even when Singleplayer exists: ' + (impModern.dest || impModern.error));
 
   // Fresh install: empty detected Saves -> Singleplayer created and used
   const freshHome = path.join(tmp, 'freshmac');
   const freshRoot = path.join(freshHome, 'Library', 'Tabletop Simulator', 'Saves');
   fs.mkdirSync(freshRoot, { recursive: true });
   const impFresh = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: freshHome });
-  assert(impFresh.ok && impFresh.dest === path.join(freshRoot, 'Singleplayer', 'from-email.json'), 'fresh install: Singleplayer created: ' + (impFresh.dest || impFresh.error));
+  assert(impFresh.ok && impFresh.dest === path.join(freshRoot, 'from-email.json'), 'fresh install: Saves root used: ' + (impFresh.dest || impFresh.error));
+  assert(!fs.existsSync(path.join(freshRoot, 'Singleplayer')), 'no Singleplayer folder is created');
+
+  // ---- Optional rename on import ----
+  const { sanitizeFileName } = require('../src/import-to-game');
+  const impNamed = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome }, 'My Renamed Save');
+  assert(impNamed.ok && impNamed.dest.endsWith('My Renamed Save.json'), 'rename applied: ' + (impNamed.dest || impNamed.error));
+  const impJson = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome }, 'With Json.json');
+  assert(impJson.ok && impJson.dest.endsWith('With Json.json'), 'user adding .json does not double it: ' + (impJson.dest || impJson.error));
+  const savesRootPath = path.join(protonSaves, 'My Games', 'Tabletop Simulator', 'Saves');
+  const impTraversal = await importOne(saveSrc, null, { platform: 'linux', env: {}, home: linHome }, '../../../../evil');
+  assert(
+    impTraversal.ok && path.dirname(impTraversal.dest) === savesRootPath && /^evil(-\d+)?\.json$/.test(path.basename(impTraversal.dest)),
+    'rename is sanitized, never escapes the saves folder: ' + impTraversal.dest
+  );
+  assert.strictEqual(sanitizeFileName('   '), null, 'blank rename falls back to original name');
+  assert.strictEqual(sanitizeFileName('../../x'), 'x.json', 'basename only, forced .json');
 
   console.log('✓ all smoke tests passed');
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -48,15 +48,47 @@ function baseName(p) {
   return String(p || '').split(/[\\/]/).pop();
 }
 
-// ---------- import ----------
-async function importPaths(paths) {
-  if (!paths.length) return;
+// ---------- import (with optional rename) ----------
+let pendingRenameInputs = [];
+
+function confirmImport(paths) {
+  if (!paths || !paths.length) return;
+  const rows = $('rename-rows');
+  rows.innerHTML = '';
+  pendingRenameInputs = [];
+  for (const p of paths) {
+    const wrap = document.createElement('label');
+    wrap.className = 'rename-row';
+    const orig = document.createElement('span');
+    orig.className = 'orig';
+    orig.textContent = baseName(p);
+    orig.title = p;
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = baseName(p).replace(/\.json$/i, '');
+    inp.maxLength = 150;
+    inp.spellcheck = false;
+    wrap.appendChild(orig);
+    wrap.appendChild(inp);
+    rows.appendChild(wrap);
+    pendingRenameInputs.push({ path: p, input: inp });
+  }
+  const dest = firstDestPath();
+  $('rename-dest').textContent = dest
+    ? 'Into: ' + dest
+    : 'No saves folder detected yet — importing will fail until you pick one with "Add folder…".';
+  $('rename-modal').classList.remove('hidden');
+  const first = rows.querySelector('input');
+  if (first) first.focus();
+}
+
+async function importItems(items) {
   const fallback = state.customDirs[0] || null;
-  const results = await window.tts.importToTTS(paths, fallback);
+  const results = await window.tts.importToTTS(items, fallback);
   if (!Array.isArray(results)) return;
   for (const r of results) {
     if (r.ok) {
-      toast(`Imported ${r.name} → ${shortPath(r.dest)}. Open TTS → Save & Load → Singleplayer.`, 'ok');
+      toast(`Imported ${baseName(r.dest)} → TTS saves. Open TTS → Save & Load.`, 'ok');
     } else if (r.alreadyThere) {
       toast(`${r.name}: ${r.error}`);
     } else {
@@ -67,10 +99,32 @@ async function importPaths(paths) {
   if (state.active) await selectFolder(state.active.path, state.active.type);
 }
 
+$('rename-cancel').addEventListener('click', () => $('rename-modal').classList.add('hidden'));
+$('rename-ok').addEventListener('click', async () => {
+  $('rename-modal').classList.add('hidden');
+  const items = pendingRenameInputs.map(({ path, input }) => ({
+    path,
+    name: input.value.trim() || undefined
+  }));
+  pendingRenameInputs = [];
+  await importItems(items);
+});
+$('rename-modal').addEventListener('click', (e) => {
+  if (e.target === $('rename-modal')) $('rename-modal').classList.add('hidden');
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('rename-modal').classList.contains('hidden')) {
+    $('rename-modal').classList.add('hidden');
+  }
+  if (e.key === 'Enter' && !$('rename-modal').classList.contains('hidden') && e.target.tagName === 'INPUT') {
+    $('rename-ok').click();
+  }
+});
+
 async function pickAndImport() {
   const paths = await window.tts.pickSaveFiles();
   if (!paths || !paths.length) return;
-  await importPaths(paths);
+  confirmImport(paths);
 }
 
 // ---------- landing / import-first start screen ----------
@@ -259,7 +313,7 @@ function bindDetailButtons(filePath) {
     btn.addEventListener('click', async () => {
       const act = btn.getAttribute('data-act');
       if (act === 'import') {
-        await importPaths([filePath]);
+        confirmImport([filePath]);
       } else if (act === 'raw') {
         const raw = await window.tts.saveRaw(filePath);
         openRaw(filePath, raw);
@@ -342,7 +396,7 @@ window.addEventListener('drop', async (e) => {
     toast('Drop .json save files to import them.', 'bad');
     return;
   }
-  await importPaths(paths);
+  confirmImport(paths);
 });
 
 // ---------- init ----------
