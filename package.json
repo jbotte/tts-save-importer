@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "electron": "^38.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "com.lunarlyra.ttssaveimporter",
@@ -53,8 +53,7 @@
       ],
       "category": "Utility",
       "maintainer": "John LunarLyra LLC <jbotte@users.noreply.github.com>",
-      "desktopName": "tts-save-importer.desktop",
-      "syncDesktopName": true
+      "synopsis": "Import and inspect Tabletop Simulator save JSON files"
     }
   }
 }
