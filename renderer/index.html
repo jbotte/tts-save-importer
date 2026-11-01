@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+  <title>TTS Save Importer</title>
+  <style>
+    :root {
+      --bg: #14161b;
+      --bg2: #1b1e26;
+      --bg3: #222632;
+      --line: #2c3140;
+      --text: #e6e9f0;
+      --muted: #8b93a7;
+      --accent: #f0a132;
+      --accent-soft: rgba(240, 161, 50, 0.15);
+      --ok: #4cc38a;
+      --bad: #e5534b;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg2);
+      -webkit-app-region: drag;
+    }
+    header .brand { font-weight: 700; letter-spacing: 0.3px; }
+    header .brand small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+    header .actions { display: flex; gap: 8px; -webkit-app-region: no-drag; }
+    button {
+      font: inherit; color: var(--text); background: var(--bg3);
+      border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #1b1400; font-weight: 600; }
+    button.primary:hover { filter: brightness(1.1); }
+    button.danger:hover { border-color: var(--bad); color: var(--bad); }
+    button.small { padding: 3px 9px; font-size: 12px; border-radius: 6px; }
+
+    main { flex: 1; display: flex; min-height: 0; }
+
+    aside {
+      width: 300px; min-width: 240px; border-right: 1px solid var(--line);
+      background: var(--bg2); overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .side-section h3 {
+      margin: 0 0 6px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted);
+    }
+    .side-section ul { list-style: none; margin: 0; padding: 0; }
+    .side-section li {
+      padding: 7px 9px; border-radius: 8px; cursor: pointer; margin-bottom: 3px;
+      border: 1px solid transparent; word-break: break-all;
+    }
+    .side-section li:hover { background: var(--bg3); }
+    .side-section li.active { background: var(--accent-soft); border-color: var(--accent); }
+    .side-section li.missing { color: var(--muted); cursor: default; opacity: 0.75; }
+    .side-section li.missing:hover { background: none; }
+    .path { font-size: 11px; color: var(--muted); display: block; }
+    .badge {
+      display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 10px;
+      background: var(--bg3); color: var(--muted); margin-left: 6px;
+    }
+    .badge.ok { color: var(--ok); }
+    .badge.warn { color: var(--accent); }
+    .side-footer { margin-top: auto; font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+    #content { flex: 1; display: flex; min-width: 0; }
+    #list-pane {
+      width: 400px; min-width: 280px; border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    #list-header { padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    #save-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+    #save-list li {
+      padding: 9px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px;
+      border: 1px solid transparent; display: flex; flex-direction: column; gap: 2px;
+    }
+    #save-list li:hover { background: var(--bg3); }
+    #save-list li.active { background: var(--accent-soft); border-color: var(--accent); }
+    #save-list .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #save-list .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
+
+    #detail-pane { flex: 1; overflow-y: auto; padding: 18px 22px; min-width: 0; }
+    #detail-pane h2 { margin: 0 0 4px; font-size: 18px; }
+    #detail-pane .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; word-break: break-all; }
+    .kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px; margin-bottom: 16px; }
+    .kv .k { color: var(--muted); font-size: 12px; }
+    .kv .v { word-break: break-all; }
+    .detail-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .error { color: var(--bad); }
+    .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+    code.hint {
+      background: var(--bg3); border: 1px solid var(--line); border-radius: 6px;
+      padding: 1px 6px; font-size: 11px; display: inline-block; margin: 2px 0;
+    }
+
+    #toasts { position: fixed; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+    .toast {
+      background: var(--bg3); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+      padding: 10px 14px; border-radius: 8px; max-width: 380px; box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+      animation: fadein 0.15s ease-out;
+    }
+    .toast.ok { border-left-color: var(--ok); }
+    .toast.bad { border-left-color: var(--bad); }
+    @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+    #raw-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; z-index: 40;
+    }
+    #raw-modal.hidden { display: none; }
+    .raw-card {
+      width: min(900px, 92vw); height: 82vh; background: var(--bg2);
+      border: 1px solid var(--line); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .raw-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; border-bottom: 1px solid var(--line);
+    }
+    .raw-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #raw-body {
+      margin: 0; padding: 14px; overflow: auto; flex: 1;
+      font: 12px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+      white-space: pre; color: #c9d2e3;
+    }
+
+    body.dragging::after {
+      content: "Drop .json save files to import";
+      position: fixed; inset: 12px; border: 2px dashed var(--accent); border-radius: 14px;
+      background: rgba(20, 22, 27, 0.85); display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 600; color: var(--accent); z-index: 30; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">🎲 TTS Save Importer <small>Tabletop Simulator save JSON importer</small></div>
+    <div class="actions">
+      <button id="btn-refresh" title="Re-scan detected folders">Refresh</button>
+      <button id="btn-add-folder" title="Add a custom Saves folder">Add folder…</button>
+      <button id="btn-import-file" class="primary" title="Import specific .json files">Import file…</button>
+    </div>
+  </header>
+
+  <div id="toasts"></div>
+
+  <main>
+    <aside>
+      <div class="side-section">
+        <h3>Detected save folders</h3>
+        <ul id="auto-list"></ul>
+      </div>
+      <div class="side-section">
+        <h3>Added folders</h3>
+        <ul id="custom-list"></ul>
+      </div>
+      <div class="side-section">
+        <h3>Imported (<span id="import-count">0</span>)</h3>
+        <ul id="import-list"></ul>
+      </div>
+      <div class="side-footer" id="side-footer"></div>
+    </aside>
+
+    <section id="content">
+      <div id="list-pane">
+        <div id="list-header">Choose a folder on the left.</div>
+        <ul id="save-list"></ul>
+      </div>
+      <div id="detail-pane">
+        <p class="muted">Select a save to see its details, or drag &amp; drop <code>.json</code> files anywhere to import them.</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="raw-modal" class="hidden">
+    <div class="raw-card">
+      <div class="raw-head">
+        <span id="raw-title"></span>
+        <div style="display:flex;gap:8px">
+          <button id="raw-copy" class="small">Copy</button>
+          <button id="raw-close" class="small">Close</button>
+        </div>
+      </div>
+      <pre id="raw-body"></pre>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+name: Build installers
+
+on:
+  push:
+    tags: ['v*']        # e.g. `git tag v0.1.0 && git push --tags` → full release
+  pull_request:          # every PR builds installers too, as a smoke test
+  workflow_dispatch:     # a "Run workflow" button on the Actions tab
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false   # a Mac failure shouldn't cancel the Windows build
+      matrix:
+        include:
+          - os: ubuntu-latest
+            builder_args: --linux
+            artifact_globs: |
+              dist/*.AppImage
+              dist/*.deb
+          - os: windows-latest
+            builder_args: --win
+            artifact_globs: |
+              dist/*.exe
+          - os: macos-latest
+            # real Mac runner; build for Apple Silicon AND Intel so either Mac can open it
+            builder_args: --mac --arm64 --x64
+            artifact_globs: |
+              dist/*.dmg
+              dist/*.zip
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.cache/http
+            ~/AppData/Local/electron/Cache
+            ~/Library/Caches/electron
+            ~/AppData/Local/electron-builder/Cache
+            ~/Library/Caches/electron-builder
+          key: electron-${{ matrix.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: electron-${{ matrix.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build installers
+        run: npx electron-builder ${{ matrix.builder_args }} --publish never
+        env:
+          # No code-signing certificates configured → skip signing instead of failing.
+          # (Windows installers are still fine; unsigned macOS builds show a
+          #  right-click → Open Gatekeeper prompt on first launch.)
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            ${{ matrix.artifact_globs }}
+          if-no-files-found: warn
+
+  release:
+    # Only on version tags: gather the three OS artifacts into one Release.
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
