@@ -83,12 +83,12 @@ function win32Candidates(env, home) {
 
 function darwinCandidates(home) {
   return [
-    // Community threads report this as the default for newer builds
+    // Official KB "Save Game Data Location" for macOS (kb.tabletopsimulator.com)
+    path.join(home, 'Library', 'Tabletop Simulator', 'Saves'),
+    // Community threads report this as the default on newer builds
     path.join(home, 'Documents', ...SAVES_SEGMENTS),
     // Older/alternative app-support location, just in case
-    path.join(home, 'Library', 'Application Support', 'Tabletop Simulator', 'Saves'),
-    // Official KB "Save Game Data Location" for macOS (kb.tabletopsimulator.com)
-    path.join(home, 'Library', 'Tabletop Simulator', 'Saves')
+    path.join(home, 'Library', 'Application Support', 'Tabletop Simulator', 'Saves')
   ];
 }
 

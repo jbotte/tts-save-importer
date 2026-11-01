@@ -1,7 +1,7 @@
 {
   "name": "tts-save-importer",
   "productName": "TTS Save Importer",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Cross-platform importer for Tabletop Simulator save JSON files (Windows, macOS, Linux)",
   "main": "main.js",
   "author": {

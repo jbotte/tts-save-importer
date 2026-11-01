@@ -75,10 +75,13 @@ async function main() {
   makeFakeSaves(path.join(macHome, 'Documents'));
   const macDirs = candidateSaveDirs({ platform: 'darwin', env: {}, home: macHome });
   assert(macDirs.length >= 3);
-  assert(macDirs[0] === path.join(macHome, 'Documents', 'My Games', 'Tabletop Simulator', 'Saves'));
   assert(
-    macDirs.some((d) => d === path.join(macHome, 'Library', 'Tabletop Simulator', 'Saves')),
-    'macOS candidates include ~/Library/Tabletop Simulator/Saves'
+    macDirs[0] === path.join(macHome, 'Library', 'Tabletop Simulator', 'Saves'),
+    'documented macOS KB path must be candidate #1'
+  );
+  assert(
+    macDirs[1] === path.join(macHome, 'Documents', 'My Games', 'Tabletop Simulator', 'Saves'),
+    'community macOS path remains candidate #2'
   );
 
   // If a Mac only has saves under ~/Library/Tabletop Simulator/Saves, scan + detect must work there

@@ -16,7 +16,7 @@ A cross-platform **Electron** app for importing **Tabletop Simulator** save JSON
 | OS | Location |
 | --- | --- |
 | Windows | `%USERPROFILE%\Documents\My Games\Tabletop Simulator\Saves` (also checks `%OneDrive%\Documents` and the registry "Personal" known-folder for redirected Documents) |
-| macOS | `~/Documents/My Games/Tabletop Simulator/Saves`, with fallbacks `~/Library/Application Support/Tabletop Simulator/Saves` and `~/Library/Tabletop Simulator/Saves` |
+| macOS | `~/Library/Tabletop Simulator/Saves` (official KB, tried first), `~/Documents/My Games/Tabletop Simulator/Saves` (newer builds per community), `~/Library/Application Support/Tabletop Simulator/Saves` |
 | Linux | `<steam library>/steamapps/compatdata/286160/pfx/drive_c/users/steamuser/Documents/My Games/Tabletop Simulator/Saves` — TTS runs under Proton. All libraries from `libraryfolders.vdf` are searched, plus Flatpak (`~/.var/app/com.valvesoftware.Steam/...`) and Snap (`~/snap/steam/common/...`) roots. Older prefixes that use your real username instead of `steamuser` are checked too. |
 
 Within `Saves/`: `Singleplayer/`, `Workshop/`, `Multiplayer-…` subfolders and root-level `Multiplayer-*-AUTOSAVE-*.json` files are all picked up.
