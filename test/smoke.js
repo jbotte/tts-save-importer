@@ -198,6 +198,30 @@ async function main() {
   const fb = await importOne(saveSrc, manualDir, { platform: 'linux', env: {}, home: lonelyHome });
   assert(fb.ok && fb.dest.startsWith(path.join(tmp, 'manual-saves')), 'fallback dir used: ' + (fb.error || fb.dest));
 
+  // ---- Adaptive destination: Singleplayer vs old-style Saves-root ----
+  // Old layout: single-player saves directly in Saves/ (TS_Save_*.json + index)
+  const oldHome = path.join(tmp, 'oldmac');
+  const oldRoot = path.join(oldHome, 'Library', 'Tabletop Simulator', 'Saves');
+  fs.mkdirSync(oldRoot, { recursive: true });
+  fs.writeFileSync(path.join(oldRoot, 'TS_Save_1.json'), JSON.stringify({ SaveName: 'Old', States: [{}] }));
+  fs.writeFileSync(path.join(oldRoot, 'SaveFileInfos.json'), '{}');
+  const impOld = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: oldHome });
+  assert(impOld.ok && impOld.dest === path.join(oldRoot, 'from-email.json'), 'old-layout: import goes to Saves root: ' + (impOld.dest || impOld.error));
+
+  // Modern layout with real saves in Singleplayer wins even if root has stray json
+  const modernHome = path.join(tmp, 'modernmac');
+  const modernRoot = path.join(modernHome, 'Library', 'Tabletop Simulator', 'Saves');
+  writeSaves(modernRoot); // Singleplayer/ has saves; root has a Multiplayer autosave file
+  const impModern = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: modernHome });
+  assert(impModern.ok && impModern.dest.includes('Singleplayer'), 'modern layout: Singleplayer preferred: ' + (impModern.dest || impModern.error));
+
+  // Fresh install: empty detected Saves -> Singleplayer created and used
+  const freshHome = path.join(tmp, 'freshmac');
+  const freshRoot = path.join(freshHome, 'Library', 'Tabletop Simulator', 'Saves');
+  fs.mkdirSync(freshRoot, { recursive: true });
+  const impFresh = await importOne(saveSrc, null, { platform: 'darwin', env: {}, home: freshHome });
+  assert(impFresh.ok && impFresh.dest === path.join(freshRoot, 'Singleplayer', 'from-email.json'), 'fresh install: Singleplayer created: ' + (impFresh.dest || impFresh.error));
+
   console.log('✓ all smoke tests passed');
   fs.rmSync(tmp, { recursive: true, force: true });
 }

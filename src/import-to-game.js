@@ -9,6 +9,17 @@ const fsp = fs.promises;
 const path = require('path');
 const { detectSaveLocations, isDir } = require('./tts-locations');
 
+/** True if dir directly contains at least one real save json (not the index). */
+function hasSaveJson(dir) {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .some((e) => e.isFile() && e.name.toLowerCase().endsWith('.json') && e.name.toLowerCase() !== 'savefileinfos.json');
+  } catch {
+    return false;
+  }
+}
+
 /** Where imported saves land: detected TTS Saves/Singleplayer, else the fallback. */
 function pickImportDir(fallbackDir, detectOpts) {
   const locs = detectSaveLocations(detectOpts || {});
@@ -16,6 +27,11 @@ function pickImportDir(fallbackDir, detectOpts) {
   if (!base && fallbackDir && isDir(fallbackDir)) base = fallbackDir;
   if (!base) return null;
   const singleplayer = path.join(base, 'Singleplayer');
+  // TTS's Save & Load → Singleplayer reads Saves/Singleplayer/ — prefer it when it holds saves.
+  if (isDir(singleplayer) && hasSaveJson(singleplayer)) return singleplayer;
+  // Older TTS layouts keep single-player saves directly in Saves/ (TS_Save_*.json + SaveFileInfos.json).
+  if (hasSaveJson(base)) return base;
+  // Fresh install, nothing saved yet: Singleplayer is where TTS will save first games.
   try {
     fs.mkdirSync(singleplayer, { recursive: true });
   } catch {

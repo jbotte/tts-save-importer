@@ -91,8 +91,9 @@ function renderLanding() {
         <h2>Import a Tabletop Simulator save</h2>
         <p>Pick a <code>.json</code> save file — or drag one anywhere onto this window.</p>
         <p><button class="primary" id="hero-pick" style="font-size:15px;padding:10px 22px">Choose file to import…</button></p>
-        <p class="muted" style="font-size:12px;margin-top:16px">It will be copied into your game's saves:<br>
-        <code class="hint">${esc(dest)}</code><br>…inside its <code class="hint">Singleplayer</code> subfolder.</p>
+        <p class="muted" style="font-size:12px;margin-top:16px">It will be copied into your game's saves folder:<br>
+        <code class="hint">${esc(dest)}</code><br>
+        TTS will list it under <i>Save &amp; Load</i>.</p>
         <p class="muted" style="font-size:12px;margin-top:14px">Want to browse existing saves first? Click a folder on the left.</p>
       </div>`
     : `<div class="empty">
