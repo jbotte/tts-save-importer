@@ -73,6 +73,36 @@ async function pickAndImport() {
   await importPaths(paths);
 }
 
+// ---------- landing / import-first start screen ----------
+function firstDestPath() {
+  const existing = state.candidates.filter((c) => c.exists);
+  return existing.length ? existing[0].path : (state.customDirs[0] || null);
+}
+
+function renderLanding() {
+  state.active = null;
+  state.selectedSavePath = null;
+  renderSidebar();
+  $('list-header').textContent = 'Ready to import';
+  $('save-list').innerHTML = '<li class="empty">Pick a file with the button, or drag one onto the window.</li>';
+  const dest = firstDestPath();
+  $('detail-pane').innerHTML = dest
+    ? `<div class="empty">
+        <h2>Import a Tabletop Simulator save</h2>
+        <p>Pick a <code>.json</code> save file — or drag one anywhere onto this window.</p>
+        <p><button class="primary" id="hero-pick" style="font-size:15px;padding:10px 22px">Choose file to import…</button></p>
+        <p class="muted" style="font-size:12px;margin-top:16px">It will be copied into your game's saves:<br>
+        <code class="hint">${esc(dest)}</code><br>…inside its <code class="hint">Singleplayer</code> subfolder.</p>
+        <p class="muted" style="font-size:12px;margin-top:14px">Want to browse existing saves first? Click a folder on the left.</p>
+      </div>`
+    : `<div class="empty">
+        <h2>No TTS Saves folder found</h2>
+        <p>Open Tabletop Simulator once so the folder exists, or click <b>Add folder…</b> and pick your Saves folder — imports will go there.</p>
+      </div>`;
+  const hp = $('hero-pick');
+  if (hp) hp.addEventListener('click', pickAndImport);
+}
+
 // ---------- sidebar ----------
 function renderSidebar() {
   const auto = $('auto-list');
@@ -263,10 +293,15 @@ $('raw-modal').addEventListener('click', (e) => {
 
 // ---------- top actions ----------
 $('btn-refresh').addEventListener('click', async () => {
+  const wasActive = state.active;
   await refreshLocations({ keepActive: true });
-  if (state.active) await selectFolder(state.active.path, state.active.type);
+  if (wasActive) await selectFolder(wasActive.path, wasActive.type);
   toast('Folders re-scanned.', 'ok');
 });
+
+document.querySelector('.brand').style.cursor = 'pointer';
+document.querySelector('.brand').title = 'Back to the import screen';
+document.querySelector('.brand').addEventListener('click', renderLanding);
 
 $('btn-add-folder').addEventListener('click', async () => {
   const res = await window.tts.pickFolder();
@@ -312,11 +347,8 @@ window.addEventListener('drop', async (e) => {
 // ---------- init ----------
 async function refreshLocations({ keepActive = false } = {}) {
   state.candidates = await window.tts.candidateLocations();
-  const existing = state.candidates.filter((c) => c.exists);
   renderSidebar();
-  if (!keepActive && !state.active && existing.length) {
-    await selectFolder(existing[0].path, 'auto');
-  }
+  if (!keepActive && !state.active) renderLanding();
 }
 
 async function init() {
@@ -336,13 +368,10 @@ async function init() {
   }
 
   await refreshLocations();
-  if (!state.candidates.some((c) => c.exists)) {
-    $('detail-pane').innerHTML =
-      '<div class="empty"><h2>No save folders found</h2>' +
-      '<p>We could not find a Tabletop Simulator <code>Saves</code> folder automatically.<br>' +
-      'Open Tabletop Simulator once (Steam → play) so the folder exists, or click ' +
-      '<b>Add folder…</b> and pick your Saves folder manually — imports will then go there.</p></div>';
-  }
+  renderLanding();
+  // The app's whole job is importing: if we know where saves go, open the
+  // file picker right away. Cancelling just leaves the landing screen.
+  if (firstDestPath()) setTimeout(() => pickAndImport(), 500);
 }
 
 init();

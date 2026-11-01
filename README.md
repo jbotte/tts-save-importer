@@ -4,8 +4,8 @@ A cross-platform **Electron** app for importing **Tabletop Simulator** save JSON
 
 ## What it does
 
-- **Auto-detects** TTS `Saves` folders for your OS (see table below), including OneDrive-redirected Documents on Windows and every Steam library / Proton prefix on Linux (Flatpak and Snap included).
-- **Lists** every `.json` save (Singleplayer / Multiplayer autosaves / Workshop), newest first.
+- **Opens on the import prompt**: launch → file picker appears (when a saves destination is known), or a clear drop-zone screen with the exact destination shown. Drag & drop and ⌘O/Ctrl+O work anytime.
+- **Auto-detects** TTS `Saves` folders for your OS (see table below), including OneDrive-redirected Documents on Windows and every Steam library / Proton prefix on Linux (Flatpak and Snap included). Clicking a folder in the sidebar browses it — handy for verifying imports landed.
 - **Inspects** a save before importing: game name, table, object/zone/graph counts, script presence, size, modified date — and flags broken JSON.
 - **Imports** validated saves straight into the detected TTS folder (`…/Saves/Singleplayer/`) — one step, no staging area, no directory picking. Originals are never modified; name collisions get a numeric suffix. **Add folder…** exists purely as a fallback when auto-detection can't find the folder (exotic Steam setups).
 - **Drag & drop** `.json` files anywhere onto the window to import.
