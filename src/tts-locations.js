@@ -85,7 +85,9 @@ function darwinCandidates(home) {
   return [
     path.join(home, 'Documents', ...SAVES_SEGMENTS),
     // Older/alternative app-support location, just in case
-    path.join(home, 'Library', 'Application Support', 'Tabletop Simulator', 'Saves')
+    path.join(home, 'Library', 'Application Support', 'Tabletop Simulator', 'Saves'),
+    // Some Mac builds persist saves directly under ~/Library (seen in the wild)
+    path.join(home, 'Library', 'Tabletop Simulator', 'Saves')
   ];
 }
 

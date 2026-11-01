@@ -16,9 +16,9 @@ const { ImportLibrary } = require('../src/import-library');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-test-'));
 
-function makeFakeSaves(root) {
-  const sp = path.join(root, 'My Games', 'Tabletop Simulator', 'Saves', 'Singleplayer');
-  const ws = path.join(root, 'My Games', 'Tabletop Simulator', 'Saves', 'Workshop');
+function writeSaves(savesDir) {
+  const sp = path.join(savesDir, 'Singleplayer');
+  const ws = path.join(savesDir, 'Workshop');
   fs.mkdirSync(sp, { recursive: true });
   fs.mkdirSync(ws, { recursive: true });
   const save = {
@@ -36,11 +36,15 @@ function makeFakeSaves(root) {
   };
   fs.writeFileSync(path.join(sp, 'My Great Game.json'), JSON.stringify(save));
   fs.writeFileSync(
-    path.join(root, 'My Games', 'Tabletop Simulator', 'Saves', 'Multiplayer-Casual-AUTOSAVE-1.json'),
+    path.join(savesDir, 'Multiplayer-Casual-AUTOSAVE-1.json'),
     JSON.stringify({ ...save, SaveName: 'Casual' })
   );
   fs.writeFileSync(path.join(ws, 'broken.json'), '{ not json !!!');
   return { sp, save };
+}
+
+function makeFakeSaves(root) {
+  return writeSaves(path.join(root, 'My Games', 'Tabletop Simulator', 'Saves'));
 }
 
 async function main() {
@@ -70,8 +74,19 @@ async function main() {
   const macHome = path.join(tmp, 'machome');
   makeFakeSaves(path.join(macHome, 'Documents'));
   const macDirs = candidateSaveDirs({ platform: 'darwin', env: {}, home: macHome });
-  assert(macDirs.length >= 2);
+  assert(macDirs.length >= 3);
   assert(macDirs[0] === path.join(macHome, 'Documents', 'My Games', 'Tabletop Simulator', 'Saves'));
+  assert(
+    macDirs.some((d) => d === path.join(macHome, 'Library', 'Tabletop Simulator', 'Saves')),
+    'macOS candidates include ~/Library/Tabletop Simulator/Saves'
+  );
+
+  // If a Mac only has saves under ~/Library/Tabletop Simulator/Saves, scan + detect must work there
+  const libOnlyHome = path.join(tmp, 'machome-libonly');
+  const libOnlySaves = path.join(libOnlyHome, 'Library', 'Tabletop Simulator', 'Saves');
+  writeSaves(libOnlySaves);
+  const libOnlyScan = scanSaveDirectory(libOnlySaves);
+  assert.strictEqual(libOnlyScan.count, 3, 'saves under ~/Library/Tabletop Simulator are scannable');
 
   // ---- Linux discovery (Proton compatdata under several steam roots) ----
   const linHome = path.join(tmp, 'linhome');
