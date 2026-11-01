@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "description": "Cross-platform importer for Tabletop Simulator save JSON files (Windows, macOS, Linux)",
   "main": "main.js",
-  "author": "John LunarLyra LLC",
+  "author": {
+    "name": "John LunarLyra LLC",
+    "email": "jbotte@users.noreply.github.com"
+  },
   "license": "MIT",
   "scripts": {
     "start": "electron .",
@@ -48,7 +51,10 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "John LunarLyra LLC <jbotte@users.noreply.github.com>",
+      "desktopName": "tts-save-importer.desktop",
+      "syncDesktopName": true
     }
   }
 }
